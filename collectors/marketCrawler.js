@@ -1,8 +1,8 @@
 const axios = require("axios");
 
-let lastGoodData = [];
+let cache = [];
 
-async function fetchCS2Cap(retry = 0) {
+async function fetchData(retry = 0) {
     try {
         const res = await axios.get("https://api.cs2cap.com/v1/web/prices", {
             headers: {
@@ -12,41 +12,34 @@ async function fetchCS2Cap(retry = 0) {
             timeout: 8000
         });
 
-        const items = res.data?.items || [];
+        const data = res.data?.items || [];
 
-        if (items.length) {
-            lastGoodData = items;
-        }
+        if (data.length) cache = data;
 
-        return items;
+        return data;
 
     } catch (err) {
-        console.log("CS2Cap error:", err.message);
+        console.log("API error:", err.message);
 
-        // 🔁 AUTO RETRY (max 3)
-        if (retry < 3) {
-            console.log("Retrying CS2Cap...", retry + 1);
-            return fetchCS2Cap(retry + 1);
+        if (retry < 2) {
+            return fetchData(retry + 1);
         }
 
-        // 🧠 fallback cache
-        console.log("Using last good data fallback");
-        return lastGoodData;
+        return cache;
     }
 }
 
 async function crawlMarket() {
-    const items = await fetchCS2Cap();
+    const data = await fetchData();
 
-    // 🧪 HARD FALLBACK jeśli wszystko padnie
-    if (!items || items.length === 0) {
+    if (!data.length) {
         return [
-            { market_hash_name: "AK-47 | Redline", price: 12, volume: 3 },
-            { market_hash_name: "AWP | Asiimov", price: 45, volume: 2 }
+            { market_hash_name: "AK-47 | Redline", price: 12, volume: 2 },
+            { market_hash_name: "AWP | Asiimov", price: 45, volume: 1 }
         ];
     }
 
-    return items.map(i => ({
+    return data.map(i => ({
         name: i.market_hash_name,
         price: Number(i.price),
         listings: i.volume || 1
