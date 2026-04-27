@@ -1,73 +1,56 @@
 const axios = require("axios");
 
+let lastGoodData = [];
 
-// ============================
-// 🔥 CS2CAP (PRIMARY SOURCE)
-// ============================
-async function fetchCS2Cap() {
+async function fetchCS2Cap(retry = 0) {
     try {
         const res = await axios.get("https://api.cs2cap.com/v1/web/prices", {
-            params: {
-                limit: 100
+            headers: {
+                Authorization: `Bearer ${process.env.CS2CAP_KEY}`
             },
-            timeout: 10000
+            params: { limit: 100 },
+            timeout: 8000
         });
 
         const items = res.data?.items || [];
 
-        return items.map(i => ({
-            name: i.market_hash_name,
-            price: Number(i.price),
-            listings: i.volume || 1,
-            source: "cs2cap"
-        }));
+        if (items.length) {
+            lastGoodData = items;
+        }
+
+        return items;
 
     } catch (err) {
         console.log("CS2Cap error:", err.message);
-        return [];
+
+        // 🔁 AUTO RETRY (max 3)
+        if (retry < 3) {
+            console.log("Retrying CS2Cap...", retry + 1);
+            return fetchCS2Cap(retry + 1);
+        }
+
+        // 🧠 fallback cache
+        console.log("Using last good data fallback");
+        return lastGoodData;
     }
 }
 
-
-// ============================
-// 🧠 NORMALIZER (SAFE CLEAN)
-// ============================
-function normalize(items) {
-    return items
-        .filter(i => i.name && i.price > 0)
-        .map(i => ({
-            name: i.name,
-            price: i.price,
-            listings: i.listings || 1,
-            liquidity: i.listings < 5 ? "LOW" : "OK",
-            source: i.source
-        }));
-}
-
-
-// ============================
-// 🧪 FALLBACK (ALWAYS SAFE)
-// ============================
-function fallbackData() {
-    return [
-        { name: "AK-47 | Redline", price: 12.5, listings: 4, source: "fallback" },
-        { name: "AWP | Asiimov", price: 45, listings: 2, source: "fallback" },
-        { name: "M4A1-S | Printstream", price: 38, listings: 3, source: "fallback" },
-        { name: "Gloves | Fade", price: 120, listings: 1, source: "fallback" }
-    ];
-}
-
-
-// ============================
-// 🚀 MAIN CRAWLER
-// ============================
 async function crawlMarket() {
+    const items = await fetchCS2Cap();
 
-    const cs2cap = await fetchCS2Cap();
+    // 🧪 HARD FALLBACK jeśli wszystko padnie
+    if (!items || items.length === 0) {
+        return [
+            { market_hash_name: "AK-47 | Redline", price: 12, volume: 3 },
+            { market_hash_name: "AWP | Asiimov", price: 45, volume: 2 }
+        ];
+    }
 
-    let data = cs2cap.length > 0 ? cs2cap : fallbackData();
-
-    return normalize(data);
+    return items.map(i => ({
+        name: i.market_hash_name,
+        price: Number(i.price),
+        listings: i.volume || 1
+    }));
 }
 
 module.exports = { crawlMarket };
