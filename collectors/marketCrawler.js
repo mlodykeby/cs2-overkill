@@ -2,43 +2,52 @@ const axios = require("axios");
 
 
 // =========================
-// 🏴 PIRATESWAP SCRAPER
+// 🥇 CSFLOAT (BEST SOURCE)
 // =========================
-async function fetchPirateSwap() {
-
+async function fetchCSFloat() {
     try {
-
         const res = await axios.get(
-            "https://pirateswap-io.com/",
-            {
-                timeout: 10000,
-                headers: {
-                    "User-Agent": "Mozilla/5.0"
-                }
-            }
+            "https://csfloat.com/api/v1/listings",
+            { timeout: 10000 }
         );
 
-        const html = res.data;
+        const data = res.data?.data || [];
 
-        // 🔥 PROSTE WYCIĄGANIE ITEMÓW (fallback regex)
-        const names = [...html.matchAll(/market_hash_name":"(.*?)"/g)];
-        const prices = [...html.matchAll(/price":"(.*?)"/g)];
-
-        let items = [];
-
-        for (let i = 0; i < Math.min(names.length, prices.length); i++) {
-            items.push({
-                name: names[i][1],
-                price: parseFloat(prices[i][1]) || 0,
-                listings: 1,
-                source: "pirateswap"
-            });
-        }
-
-        return items;
+        return data.map(i => ({
+            name: i.item?.market_hash_name,
+            price: i.price / 100,
+            listings: 1,
+            source: "csfloat"
+        }));
 
     } catch (err) {
-        console.log("PirateSwap error:", err.message);
+        console.log("CSFloat error:", err.message);
+        return [];
+    }
+}
+
+
+// =========================
+// 🥈 CS2CAP (AGGREGATOR)
+// =========================
+async function fetchCS2Cap() {
+    try {
+        const res = await axios.get(
+            "https://api.cs2cap.com/v1/web/prices?limit=50",
+            { timeout: 10000 }
+        );
+
+        const items = res.data?.items || [];
+
+        return items.map(i => ({
+            name: i.market_hash_name,
+            price: i.price,
+            listings: 1,
+            source: "cs2cap"
+        }));
+
+    } catch (err) {
+        console.log("CS2Cap error:", err.message);
         return [];
     }
 }
@@ -51,13 +60,13 @@ async function crawlMarket() {
 
     try {
 
-        const pirateswap = await fetchPirateSwap();
+        const [csfloat, cs2cap] = await Promise.all([
+            fetchCSFloat(),
+            fetchCS2Cap()
+        ]);
 
-        console.log("PirateSwap items:", pirateswap.length);
+        const combined = [...csfloat, ...cs2cap];
 
-        const combined = [...pirateswap];
-
-        // safety filter
         return combined.filter(i =>
             i.name &&
             i.price &&
@@ -67,15 +76,7 @@ async function crawlMarket() {
 
     } catch (err) {
         console.log("CRAWLER ERROR:", err.message);
-
-        return [
-            {
-                name: "FALLBACK ITEM",
-                price: 1,
-                listings: 1,
-                source: "fallback"
-            }
-        ];
+        return [];
     }
 }
 
