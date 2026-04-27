@@ -4,13 +4,15 @@ const { Client, GatewayIntentBits } = require("discord.js");
 
 const { crawlMarket } = require("./collectors/marketCrawler");
 const { detectPumpSignals } = require("./analyzer/pumpDetector");
-const { updateData } = require("./dashboard/server");
 
+const { buildSteamLink, buildPirateSwapLink } = require("./utils/links");
 const config = require("./config");
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
+
+let running = false;
 
 client.once("ready", () => {
     console.log("🚀 BOT ONLINE");
@@ -18,36 +20,72 @@ client.once("ready", () => {
 
 async function send(channelId, msg) {
     try {
-        const channel = await client.channels.fetch(channelId);
-        if (channel) await channel.send(msg);
+        const ch = await client.channels.fetch(channelId);
+        if (ch) await ch.send(msg);
     } catch (e) {
         console.log("SEND ERROR:", e.message);
     }
 }
 
+// 🔥 SAFE CYCLE (NO DOUBLE RUN)
 async function cycle() {
 
-    console.log("CYCLE START");
+    if (running) return;
+    running = true;
 
-    const market = await crawlMarket();
+    try {
 
-    console.log("MARKET SIZE:", market.length);
+        const market = await crawlMarket();
 
-    const pumps = detectPumpSignals(market);
+        const signals = detectPumpSignals(market);
 
-    if (pumps.length > 0) {
-        console.log("🔥 PUMP SIGNALS:", pumps.length);
+        for (const s of signals) {
 
-        for (const p of pumps) {
-            await send(config.privateChannelId,
-                `🔥 PUMP ALERT\n💎 ${p.name}\n💰 $${p.price}\n📊 SCORE ${p.score}`
-            );
+            const msg =
+`💎 ${s.name}
+💰 $${s.price}
+📊 SCORE ${s.score}
+
+🔗 Steam: ${buildSteamLink(s.name)}
+🏴 PirateSwap: ${buildPirateSwapLink(s.name, config.affiliate.pirateswap)}`;
+
+            if (s.score > 70) {
+                await send(config.privateChannelId, "👑 HIGH VALUE\n" + msg);
+            }
+
+            else if (s.score > 50) {
+                await send(config.premiumChannelId, "🔥 PUMP\n" + msg);
+            }
+
+            else {
+                await send(config.publicChannelId, "📦 FLIP\n" + msg);
+            }
         }
+
+    } catch (err) {
+        console.log("CYCLE ERROR:", err.message);
     }
 
-    updateData(market);
+    running = false;
 }
 
-setInterval(cycle, 15000);
 
-client.login(process.env.TOKEN);
+// 🔁 AUTO-RESTART LOOP (SELF-HEAL)
+setInterval(() => {
+    cycle().catch(err => {
+        console.log("CRITICAL LOOP ERROR:", err.message);
+        running = false; // reset lock
+    });
+}, 12000);
+
+
+// 🧠 FAILSAFE WATCHDOG (JEŚLI BOT ZAWISNIE)
+setInterval(() => {
+    if (!running) return;
+
+    console.log("🧠 WATCHDOG: cycle took too long → resetting");
+    running = false;
+
+}, 30000);
+
+client.login(process.env.DISCORD_TOKEN);
