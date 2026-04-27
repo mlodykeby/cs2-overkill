@@ -3,7 +3,7 @@ require("dotenv").config();
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const { crawlMarket } = require("./collectors/marketCrawler");
-const { detectPumpSignals } = require("./analyzer/pumpDetector");
+const { calculateArbitrage } = require("./analyzer/arbitrageEngine");
 
 const { buildSteamLink, buildPirateSwapLink } = require("./utils/links");
 const config = require("./config");
@@ -12,10 +12,8 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-let running = false;
-
 client.once("ready", () => {
-    console.log("🚀 BOT ONLINE");
+    console.log("🚀 ARBITRAGE BOT ONLINE");
 });
 
 async function send(channelId, msg) {
@@ -27,65 +25,44 @@ async function send(channelId, msg) {
     }
 }
 
-// 🔥 SAFE CYCLE (NO DOUBLE RUN)
 async function cycle() {
 
-    if (running) return;
-    running = true;
+    const market = await crawlMarket();
 
-    try {
+    const arb = calculateArbitrage(market);
 
-        const market = await crawlMarket();
+    for (const a of arb.slice(0, 10)) {
 
-        const signals = detectPumpSignals(market);
+        const msg =
+`💎 ${a.name}
 
-        for (const s of signals) {
+💰 BUY: $${a.buyPrice}
+💸 SELL: $${a.sellPrice}
+📈 PROFIT: $${a.profit} (${a.profitPercent}%)
+📊 SCORE: ${a.score}
 
-            const msg =
-`💎 ${s.name}
-💰 $${s.price}
-📊 SCORE ${s.score}
+🔗 Steam: ${buildSteamLink(a.name)}
+🏴 PirateSwap: ${buildPirateSwapLink(a.name, config.affiliate.pirateswap)}`;
 
-🔗 Steam: ${buildSteamLink(s.name)}
-🏴 PirateSwap: ${buildPirateSwapLink(s.name, config.affiliate.pirateswap)}`;
-
-            if (s.score > 70) {
-                await send(config.privateChannelId, "👑 HIGH VALUE\n" + msg);
-            }
-
-            else if (s.score > 50) {
-                await send(config.premiumChannelId, "🔥 PUMP\n" + msg);
-            }
-
-            else {
-                await send(config.publicChannelId, "📦 FLIP\n" + msg);
-            }
+        if (a.signal === "HIGH_ARB") {
+            await send(config.privateChannelId, "👑 HIGH ARBITRAGE\n" + msg);
         }
 
-    } catch (err) {
-        console.log("CYCLE ERROR:", err.message);
-    }
+        else if (a.score > 40) {
+            await send(config.premiumChannelId, "🔥 ARBITRAGE\n" + msg);
+        }
 
-    running = false;
+        else {
+            await send(config.publicChannelId, "📦 OPPORTUNITY\n" + msg);
+        }
+    }
 }
 
-
-// 🔁 AUTO-RESTART LOOP (SELF-HEAL)
+// 🔁 SAFE LOOP
 setInterval(() => {
     cycle().catch(err => {
-        console.log("CRITICAL LOOP ERROR:", err.message);
-        running = false; // reset lock
+        console.log("CYCLE ERROR:", err.message);
     });
-}, 12000);
-
-
-// 🧠 FAILSAFE WATCHDOG (JEŚLI BOT ZAWISNIE)
-setInterval(() => {
-    if (!running) return;
-
-    console.log("🧠 WATCHDOG: cycle took too long → resetting");
-    running = false;
-
-}, 30000);
+}, 15000);
 
 client.login(process.env.DISCORD_TOKEN);
