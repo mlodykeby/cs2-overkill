@@ -1,12 +1,12 @@
-let dashboardMessage = null;
+let msg = null;
 
 async function initDashboard(channel) {
-    dashboardMessage = await channel.send("📊 Initializing TRADING UI...");
+    msg = await channel.send("📊 Loading dashboard...");
 }
 
 async function updateDashboard(channel, data) {
 
-    if (!dashboardMessage) {
+    if (!msg) {
         await initDashboard(channel);
         return;
     }
@@ -14,32 +14,28 @@ async function updateDashboard(channel, data) {
     const top = data.slice(0, 10);
 
     const content =
-`📊 **CS2 TRADING UI V2**
+`📊 CS2 LIVE DASHBOARD
 
-🔥 TOP OPPORTUNITIES
+🔥 TOP OPPORTUNITIES:
 
 ${top.map(i => {
-
 let emoji =
-i.label?.includes("STRONG") ? "🔥" :
-i.label?.includes("BUY") ? "📈" :
-i.label?.includes("WATCH") ? "👀" : "❌";
+i.label.includes("STRONG") ? "🔥" :
+i.label.includes("BUY") ? "📈" :
+i.label.includes("WATCH") ? "👀" : "❌";
 
-return `
-${emoji} ${i.name}
+return `${emoji} ${i.name}
 💰 $${i.price}
-📊 SCORE: ${i.score}
-🧠 AI: ${i.label}
-`;
-}).join("\n")}
+📊 SCORE ${i.score}
+🧠 ${i.label}`;
+}).join("\n\n")}
 
-────────────────────
-⏱ LIVE UPDATE: ${new Date().toLocaleTimeString()}`;
+⏱ ${new Date().toLocaleTimeString()}`;
 
     try {
-        await dashboardMessage.edit(content);
-    } catch (err) {
-        console.log("Dashboard error:", err.message);
+        await msg.edit(content);
+    } catch (e) {
+        console.log("Dashboard error:", e.message);
     }
 }
 
