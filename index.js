@@ -3,17 +3,24 @@ require("dotenv").config();
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const { crawlMarket } = require("./collectors/marketCrawler");
-const { calculateArbitrage } = require("./analyzer/arbitrageEngine");
+const { scoreMarket } = require("./analyzer/aiScoring");
 
-const { buildSteamLink, buildPirateSwapLink } = require("./utils/links");
+const { initDashboard, updateDashboard } = require("./dashboard/discordDashboard");
+
 const config = require("./config");
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-client.once("ready", () => {
-    console.log("🚀 ARBITRAGE BOT ONLINE");
+let dashboardChannel;
+
+client.once("ready", async () => {
+    console.log("🚀 TRADING UI V2 ONLINE");
+
+    dashboardChannel = await client.channels.fetch(config.dashboardChannelId);
+
+    await initDashboard(dashboardChannel);
 });
 
 async function send(channelId, msg) {
@@ -27,42 +34,40 @@ async function send(channelId, msg) {
 
 async function cycle() {
 
-    const market = await crawlMarket();
+    try {
 
-    const arb = calculateArbitrage(market);
+        const market = await crawlMarket();
 
-    for (const a of arb.slice(0, 10)) {
+        const scored = scoreMarket(market);
 
-        const msg =
-`💎 ${a.name}
-
-💰 BUY: $${a.buyPrice}
-💸 SELL: $${a.sellPrice}
-📈 PROFIT: $${a.profit} (${a.profitPercent}%)
-📊 SCORE: ${a.score}
-
-🔗 Steam: ${buildSteamLink(a.name)}
-🏴 PirateSwap: ${buildPirateSwapLink(a.name, config.affiliate.pirateswap)}`;
-
-        if (a.signal === "HIGH_ARB") {
-            await send(config.privateChannelId, "👑 HIGH ARBITRAGE\n" + msg);
+        // 📊 UPDATE DASHBOARD
+        if (dashboardChannel) {
+            await updateDashboard(dashboardChannel, scored);
         }
 
-        else if (a.score > 40) {
-            await send(config.premiumChannelId, "🔥 ARBITRAGE\n" + msg);
+        // 🔥 ALERT SYSTEM (TOP 3 ONLY)
+        for (const item of scored.slice(0, 3)) {
+
+            if (item.score < 50) continue;
+
+            const msg =
+`💎 ${item.name}
+💰 $${item.price}
+📊 SCORE: ${item.score}
+🧠 AI: ${item.label}`;
+
+            if (item.score >= 70) {
+                await send(config.privateChannelId, "🔥 STRONG BUY\n" + msg);
+            } else {
+                await send(config.premiumChannelId, "📈 OPPORTUNITY\n" + msg);
+            }
         }
 
-        else {
-            await send(config.publicChannelId, "📦 OPPORTUNITY\n" + msg);
-        }
+    } catch (err) {
+        console.log("CYCLE ERROR:", err.message);
     }
 }
 
-// 🔁 SAFE LOOP
-setInterval(() => {
-    cycle().catch(err => {
-        console.log("CYCLE ERROR:", err.message);
-    });
-}, 15000);
+setInterval(cycle, 12000);
 
 client.login(process.env.DISCORD_TOKEN);
