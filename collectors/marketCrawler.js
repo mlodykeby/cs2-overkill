@@ -1,45 +1,15 @@
 const axios = require("axios");
 
 
-// ======================
-// 🔥 SOURCE 1: DMARKET
-// ======================
-async function fetchDMarket() {
+// =========================
+// 🏴 PIRATESWAP SCRAPER
+// =========================
+async function fetchPirateSwap() {
+
     try {
+
         const res = await axios.get(
-            "https://api.dmarket.com/exchange/v1/market/items",
-            {
-                params: {
-                    limit: 100,
-                    offset: 0
-                },
-                timeout: 10000
-            }
-        );
-
-        const items = res.data?.objects || [];
-
-        return items.map(i => ({
-            name: i.title || "unknown",
-            price: i.price?.USD || 0,
-            listings: i.count || 1,
-            source: "dmarket"
-        }));
-
-    } catch (err) {
-        console.log("DMarket error:", err.response?.status || err.message);
-        return [];
-    }
-}
-
-
-// ======================
-// 🔥 SOURCE 2: SKINPORT (light scrape)
-// ======================
-async function fetchSkinport() {
-    try {
-        const res = await axios.get(
-            "https://skinport.com/market?sort=price&order=asc",
+            "https://pirateswap-io.com/",
             {
                 timeout: 10000,
                 headers: {
@@ -50,36 +20,42 @@ async function fetchSkinport() {
 
         const html = res.data;
 
-        // ⚠️ minimalistyczny fallback parser (strona się zmienia często)
-        const matches = [...html.matchAll(/"market_hash_name":"(.*?)".*?"min_price":(.*?)[,}]/g)];
+        // 🔥 PROSTE WYCIĄGANIE ITEMÓW (fallback regex)
+        const names = [...html.matchAll(/market_hash_name":"(.*?)"/g)];
+        const prices = [...html.matchAll(/price":"(.*?)"/g)];
 
-        return matches.map(m => ({
-            name: m[1],
-            price: parseFloat(m[2]) || 0,
-            listings: 1,
-            source: "skinport"
-        }));
+        let items = [];
+
+        for (let i = 0; i < Math.min(names.length, prices.length); i++) {
+            items.push({
+                name: names[i][1],
+                price: parseFloat(prices[i][1]) || 0,
+                listings: 1,
+                source: "pirateswap"
+            });
+        }
+
+        return items;
 
     } catch (err) {
-        console.log("Skinport error:", err.message);
+        console.log("PirateSwap error:", err.message);
         return [];
     }
 }
 
 
-// ======================
-// 🔥 MAIN CRAWLER (SAFE)
-// ======================
+// =========================
+// 🔥 MAIN CRAWLER
+// =========================
 async function crawlMarket() {
 
     try {
 
-        const [dmarket, skinport] = await Promise.all([
-            fetchDMarket(),
-            fetchSkinport()
-        ]);
+        const pirateswap = await fetchPirateSwap();
 
-        const combined = [...dmarket, ...skinport];
+        console.log("PirateSwap items:", pirateswap.length);
+
+        const combined = [...pirateswap];
 
         // safety filter
         return combined.filter(i =>
@@ -90,9 +66,8 @@ async function crawlMarket() {
         );
 
     } catch (err) {
-        console.log("CRAWLER GLOBAL ERROR:", err.message);
+        console.log("CRAWLER ERROR:", err.message);
 
-        // fallback żeby bot nigdy nie padł
         return [
             {
                 name: "FALLBACK ITEM",
