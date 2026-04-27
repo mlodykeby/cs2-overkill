@@ -7,6 +7,8 @@ const { scoreMarket } = require("./analyzer/aiScoring");
 
 const { initDashboard, updateDashboard } = require("./dashboard/discordDashboard");
 
+const { buildSteamLink, buildPirateSwapLink } = require("./utils/links");
+
 const config = require("./config");
 
 const client = new Client({
@@ -16,7 +18,7 @@ const client = new Client({
 let dashboardChannel;
 
 client.once("ready", async () => {
-    console.log("🚀 TRADING UI V2 ONLINE");
+    console.log("🚀 BOT ONLINE");
 
     dashboardChannel = await client.channels.fetch(config.dashboardChannelId);
 
@@ -40,12 +42,12 @@ async function cycle() {
 
         const scored = scoreMarket(market);
 
-        // 📊 UPDATE DASHBOARD
+        // 📊 DASHBOARD
         if (dashboardChannel) {
             await updateDashboard(dashboardChannel, scored);
         }
 
-        // 🔥 ALERT SYSTEM (TOP 3 ONLY)
+        // 🔥 ALERTS TOP 3
         for (const item of scored.slice(0, 3)) {
 
             if (item.score < 50) continue;
@@ -53,13 +55,16 @@ async function cycle() {
             const msg =
 `💎 ${item.name}
 💰 $${item.price}
-📊 SCORE: ${item.score}
-🧠 AI: ${item.label}`;
+📊 SCORE ${item.score}
+🧠 ${item.label}
+
+🔗 Steam: ${buildSteamLink(item.name)}
+🏴 PirateSwap: ${buildPirateSwapLink(item.name, config.affiliate.pirateswap)}`;
 
             if (item.score >= 70) {
                 await send(config.privateChannelId, "🔥 STRONG BUY\n" + msg);
             } else {
-                await send(config.premiumChannelId, "📈 OPPORTUNITY\n" + msg);
+                await send(config.premiumChannelId, "📈 BUY SIGNAL\n" + msg);
             }
         }
 
