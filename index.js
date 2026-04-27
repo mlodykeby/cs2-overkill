@@ -4,6 +4,8 @@ const { Client, GatewayIntentBits } = require("discord.js");
 
 const { crawlMarket } = require("./collectors/marketCrawler");
 const { runPipeline } = require("./analyzer/pipeline");
+const { detectPumpSignals } = require("./analyzer/pumpDetector");
+const { updateData } = require("./dashboard/server");
 
 const config = require("./config");
 
@@ -12,10 +14,13 @@ const client = new Client({
 });
 
 client.once("ready", () => {
-    console.log("🚀 BOT ONLINE");
+    console.log("🚀 TRADING BOT ONLINE");
 });
 
-// 📤 SEND SAFE
+
+// =======================
+// 📤 DISCORD SEND
+// =======================
 async function send(channelId, msg) {
     try {
         const channel = await client.channels.fetch(channelId);
@@ -25,12 +30,17 @@ async function send(channelId, msg) {
     }
 }
 
-// 🔥 SAFE CYCLE (NO CRASH)
+
+// =======================
+// 🔥 MAIN LOOP
+// =======================
 async function cycle() {
+
     try {
 
         console.log("CYCLE START");
 
+        // 1. MARKET
         const market = await crawlMarket();
 
         if (!Array.isArray(market) || market.length === 0) {
@@ -40,17 +50,30 @@ async function cycle() {
 
         console.log("MARKET SIZE:", market.length);
 
+        // 2. PIPELINE ANALYSIS
         const signals = runPipeline(market);
 
-        console.log("SIGNALS:", signals.length);
+        // 3. PUMP DETECTION
+        const pumps = detectPumpSignals(market, []);
 
+        if (pumps.length > 0) {
+            console.log("🔥 PUMP ALERTS:", pumps.length);
+
+            for (const p of pumps) {
+                await send(config.privateChannelId,
+                    `🔥 PUMP ALERT\n💎 ${p.name}\n💰 ${p.price}\n📊 SCORE ${p.score}`
+                );
+            }
+        }
+
+        // 4. DISCORD SIGNALS
         for (const s of signals || []) {
 
             const msg =
 `💎 ${s.name}
 💰 ${s.price}
 📊 SCORE: ${s.score}
-🚀 ${s.signal}`;
+🚀 SIGNAL: ${s.signal}`;
 
             if (s.signal === "BREAKOUT") {
                 await send(config.privateChannelId, "👑 BREAKOUT\n" + msg);
@@ -65,15 +88,24 @@ async function cycle() {
             }
         }
 
+        // 5. DASHBOARD UPDATE
+        updateData(market);
+
     } catch (err) {
         console.log("CYCLE ERROR:", err.message);
     }
 }
 
-// 🔁 LOOP SAFE (NO await HERE EVER)
+
+// =======================
+// 🔁 LOOP SAFE
+// =======================
 setInterval(() => {
     cycle();
-}, 15000);
+}, 12000);
 
+
+// =======================
 // 🚀 START BOT
+// =======================
 client.login(process.env.TOKEN);
