@@ -3,8 +3,6 @@ require("dotenv").config();
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const { crawlMarket } = require("./collectors/marketCrawler");
-const { update } = require("./engine/indexDB");
-const { snapshot } = require("./engine/historyDB");
 const { runPipeline } = require("./analyzer/pipeline");
 
 const config = require("./config");
@@ -17,7 +15,7 @@ client.once("ready", () => {
     console.log("🚀 BOT ONLINE");
 });
 
-// 📤 SEND FUNCTION
+// 📤 SEND SAFE
 async function send(channelId, msg) {
     try {
         const channel = await client.channels.fetch(channelId);
@@ -27,41 +25,32 @@ async function send(channelId, msg) {
     }
 }
 
-// 🔥 MAIN LOOP (ONLY PLACE WITH AWAIT)
+// 🔥 SAFE CYCLE (NO CRASH)
 async function cycle() {
-
     try {
 
         console.log("CYCLE START");
 
-        // 1. MARKET DATA
         const market = await crawlMarket();
 
-        console.log("MARKET SIZE:", market.length);
-
-        if (!market || market.length === 0) {
+        if (!Array.isArray(market) || market.length === 0) {
             console.log("⚠️ NO MARKET DATA");
             return;
         }
 
-        // 2. SAVE DATA
-        update(market);
-        snapshot(market);
+        console.log("MARKET SIZE:", market.length);
 
-        // 3. ANALYZE
         const signals = runPipeline(market);
 
         console.log("SIGNALS:", signals.length);
 
-        // 4. DISCORD OUTPUT
-        for (const s of signals) {
+        for (const s of signals || []) {
 
-            const msg = `
-💎 ${s.name}
+            const msg =
+`💎 ${s.name}
 💰 ${s.price}
 📊 SCORE: ${s.score}
-🚀 SIGNAL: ${s.signal}
-            `;
+🚀 ${s.signal}`;
 
             if (s.signal === "BREAKOUT") {
                 await send(config.privateChannelId, "👑 BREAKOUT\n" + msg);
@@ -81,10 +70,10 @@ async function cycle() {
     }
 }
 
-// 🔁 LOOP (NO TOP-LEVEL AWAIT BUG)
+// 🔁 LOOP SAFE (NO await HERE EVER)
 setInterval(() => {
     cycle();
-}, 12000);
+}, 15000);
 
 // 🚀 START BOT
 client.login(process.env.TOKEN);
