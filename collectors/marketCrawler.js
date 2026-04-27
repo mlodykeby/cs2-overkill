@@ -1,48 +1,24 @@
 const axios = require("axios");
 
 
-// =========================
-// 🥇 CSFLOAT (BEST SOURCE)
-// =========================
-async function fetchCSFloat() {
-    try {
-        const res = await axios.get(
-            "https://csfloat.com/api/v1/listings",
-            { timeout: 10000 }
-        );
-
-        const data = res.data?.data || [];
-
-        return data.map(i => ({
-            name: i.item?.market_hash_name,
-            price: i.price / 100,
-            listings: 1,
-            source: "csfloat"
-        }));
-
-    } catch (err) {
-        console.log("CSFloat error:", err.message);
-        return [];
-    }
-}
-
-
-// =========================
-// 🥈 CS2CAP (AGGREGATOR)
-// =========================
+// ============================
+// 🔥 CS2CAP (PRIMARY SOURCE)
+// ============================
 async function fetchCS2Cap() {
     try {
-        const res = await axios.get(
-            "https://api.cs2cap.com/v1/web/prices?limit=50",
-            { timeout: 10000 }
-        );
+        const res = await axios.get("https://api.cs2cap.com/v1/web/prices", {
+            params: {
+                limit: 100
+            },
+            timeout: 10000
+        });
 
         const items = res.data?.items || [];
 
         return items.map(i => ({
             name: i.market_hash_name,
-            price: i.price,
-            listings: 1,
+            price: Number(i.price),
+            listings: i.volume || 1,
             source: "cs2cap"
         }));
 
@@ -53,31 +29,45 @@ async function fetchCS2Cap() {
 }
 
 
-// =========================
-// 🔥 MAIN CRAWLER
-// =========================
+// ============================
+// 🧠 NORMALIZER (SAFE CLEAN)
+// ============================
+function normalize(items) {
+    return items
+        .filter(i => i.name && i.price > 0)
+        .map(i => ({
+            name: i.name,
+            price: i.price,
+            listings: i.listings || 1,
+            liquidity: i.listings < 5 ? "LOW" : "OK",
+            source: i.source
+        }));
+}
+
+
+// ============================
+// 🧪 FALLBACK (ALWAYS SAFE)
+// ============================
+function fallbackData() {
+    return [
+        { name: "AK-47 | Redline", price: 12.5, listings: 4, source: "fallback" },
+        { name: "AWP | Asiimov", price: 45, listings: 2, source: "fallback" },
+        { name: "M4A1-S | Printstream", price: 38, listings: 3, source: "fallback" },
+        { name: "Gloves | Fade", price: 120, listings: 1, source: "fallback" }
+    ];
+}
+
+
+// ============================
+// 🚀 MAIN CRAWLER
+// ============================
 async function crawlMarket() {
 
-    try {
+    const cs2cap = await fetchCS2Cap();
 
-        const [csfloat, cs2cap] = await Promise.all([
-            fetchCSFloat(),
-            fetchCS2Cap()
-        ]);
+    let data = cs2cap.length > 0 ? cs2cap : fallbackData();
 
-        const combined = [...csfloat, ...cs2cap];
-
-        return combined.filter(i =>
-            i.name &&
-            i.price &&
-            i.price > 0 &&
-            i.price < 100000
-        );
-
-    } catch (err) {
-        console.log("CRAWLER ERROR:", err.message);
-        return [];
-    }
+    return normalize(data);
 }
 
 module.exports = { crawlMarket };
