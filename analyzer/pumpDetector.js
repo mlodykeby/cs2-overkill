@@ -4,24 +4,16 @@ function detectPumpSignals(items, history = []) {
 
     for (const item of items) {
 
-        const past = history.find(h => h.name === item.name);
-
         let score = 0;
 
-        // 📈 cena rośnie
-        if (past && item.price > past.avgPrice * 1.1) {
-            score += 40;
-        }
+        // 🔥 low liquidity = easy pump
+        if (item.listings <= 3) score += 40;
 
-        // 📉 mało listingów
-        if (item.listings < 5) {
-            score += 20;
-        }
+        // 💰 mid price sweet spot
+        if (item.price > 10 && item.price < 100) score += 20;
 
-        // 💰 droższe itemy często pumpują wolniej
-        if (item.price > 50) {
-            score += 10;
-        }
+        // 📈 rare items boost
+        if (item.liquidity === "LOW") score += 20;
 
         if (score >= 50) {
             signals.push({
