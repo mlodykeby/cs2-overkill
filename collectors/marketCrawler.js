@@ -2,47 +2,74 @@ const axios = require("axios");
 
 let cache = [];
 
-async function fetchData(retry = 0) {
+// 🔁 SAFE FETCH (retry + timeout + fallback)
+async function fetchMarket(retry = 0) {
     try {
-        const res = await axios.get("https://api.cs2cap.com/v1/web/prices", {
-            headers: {
-                Authorization: `Bearer ${process.env.CS2CAP_KEY}`
-            },
-            params: { limit: 100 },
-            timeout: 8000
-        });
+        const res = await axios.get(
+            "https://api.cs2c.app/v1/web/prices",
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.CS2CAP_KEY}`
+                },
+                params: {
+                    limit: 100
+                },
+                timeout: 8000
+            }
+        );
 
         const data = res.data?.items || [];
 
-        if (data.length) cache = data;
+        if (data.length > 0) {
+            cache = data;
+        }
 
         return data;
 
     } catch (err) {
         console.log("API error:", err.message);
 
+        // 🔁 retry logic
         if (retry < 2) {
-            return fetchData(retry + 1);
+            return fetchMarket(retry + 1);
         }
 
         return cache;
     }
 }
 
+// 🧠 MAIN EXPORT
 async function crawlMarket() {
-    const data = await fetchData();
+    const data = await fetchMarket();
 
-    if (!data.length) {
+    // 🛡 fallback if API dead
+    if (!data || data.length === 0) {
+        console.log("Using fallback market data...");
+
         return [
-            { market_hash_name: "AK-47 | Redline", price: 12, volume: 2 },
-            { market_hash_name: "AWP | Asiimov", price: 45, volume: 1 }
+            {
+                name: "AK-47 | Redline",
+                price: 12.5,
+                listings: 3
+            },
+            {
+                name: "AWP | Asiimov",
+                price: 45.0,
+                listings: 1
+            },
+            {
+                name: "M4A1-S | Printstream",
+                price: 78.0,
+                listings: 2
+            }
         ];
     }
 
-    return data.map(i => ({
-        name: i.market_hash_name,
-        price: Number(i.price),
-        listings: i.volume || 1
+    // 📊 normalize data
+    return data.map(item => ({
+        name: item.market_hash_name || item.name,
+        price: Number(item.price) || 0,
+        listings: item.volume || item.listings || 1
     }));
 }
 
