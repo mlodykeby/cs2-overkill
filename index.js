@@ -5,7 +5,6 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const { crawlMarket } = require("./collectors/marketCrawler");
 const { update } = require("./engine/indexDB");
 const { snapshot } = require("./engine/historyDB");
-
 const { runPipeline } = require("./analyzer/pipeline");
 
 const config = require("./config");
@@ -18,7 +17,7 @@ client.once("ready", () => {
     console.log("🚀 OVERKILL SYSTEM ONLINE");
 });
 
-// helper do wysyłania wiadomości
+// wysyłanie wiadomości
 async function send(channelId, msg) {
     try {
         const channel = await client.channels.fetch(channelId);
@@ -28,11 +27,14 @@ async function send(channelId, msg) {
     }
 }
 
-// 🔥 MAIN LOOP (ASYNC FIX)
+// 🔥 GŁÓWNY CYKL (POPRAWIONY ASYNC)
 async function cycle() {
+
     try {
 
-        // 1. POBIERZ RYNEK (REAL DATA)
+        console.log("CYCLE START");
+
+        // 1. POBIERZ RYNEK
         let market = await crawlMarket();
 
         console.log("MARKET SIZE:", market.length);
@@ -42,7 +44,7 @@ async function cycle() {
             return;
         }
 
-        // 2. ZAPIS DO BAZY
+        // 2. ZAPIS
         update(market);
 
         // 3. HISTORIA
@@ -53,7 +55,7 @@ async function cycle() {
 
         console.log("SIGNALS:", signals.length);
 
-        // 5. DISCORD OUTPUT
+        // 5. DISCORD
         for (const s of signals) {
 
             const msg = `
@@ -81,7 +83,7 @@ async function cycle() {
     }
 }
 
-// 🔁 LOOP
+// 🔁 LOOP (POPRAWNY ASYNC SAFE)
 setInterval(cycle, 12000);
 
 // 🚀 START
