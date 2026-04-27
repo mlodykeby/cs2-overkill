@@ -14,10 +14,10 @@ const client = new Client({
 });
 
 client.once("ready", () => {
-    console.log("🚀 OVERKILL SYSTEM ONLINE");
+    console.log("🚀 BOT ONLINE");
 });
 
-// wysyłanie wiadomości
+// 📤 SEND FUNCTION
 async function send(channelId, msg) {
     try {
         const channel = await client.channels.fetch(channelId);
@@ -27,15 +27,15 @@ async function send(channelId, msg) {
     }
 }
 
-// 🔥 GŁÓWNY CYKL (POPRAWIONY ASYNC)
+// 🔥 MAIN LOOP (ONLY PLACE WITH AWAIT)
 async function cycle() {
 
     try {
 
         console.log("CYCLE START");
 
-        // 1. POBIERZ RYNEK
-        let market = await crawlMarket();
+        // 1. MARKET DATA
+        const market = await crawlMarket();
 
         console.log("MARKET SIZE:", market.length);
 
@@ -44,23 +44,21 @@ async function cycle() {
             return;
         }
 
-        // 2. ZAPIS
+        // 2. SAVE DATA
         update(market);
-
-        // 3. HISTORIA
         snapshot(market);
 
-        // 4. ANALIZA
-        let signals = runPipeline(market);
+        // 3. ANALYZE
+        const signals = runPipeline(market);
 
         console.log("SIGNALS:", signals.length);
 
-        // 5. DISCORD
+        // 4. DISCORD OUTPUT
         for (const s of signals) {
 
             const msg = `
 💎 ${s.name}
-💰 ${s.price.toFixed(2)}
+💰 ${s.price}
 📊 SCORE: ${s.score}
 🚀 SIGNAL: ${s.signal}
             `;
@@ -83,8 +81,10 @@ async function cycle() {
     }
 }
 
-// 🔁 LOOP (POPRAWNY ASYNC SAFE)
-setInterval(cycle, 12000);
+// 🔁 LOOP (NO TOP-LEVEL AWAIT BUG)
+setInterval(() => {
+    cycle();
+}, 12000);
 
-// 🚀 START
+// 🚀 START BOT
 client.login(process.env.TOKEN);
